@@ -1,0 +1,74 @@
+def gitRepository = 'http://gitlab.mixcre.com/root/nodejs-demo-k8s.git'
+def gitBranch = 'PROD_service_A'
+
+// Image infor in registry
+def imageGroup = 'demo'
+def appName = "my-app"
+def namespace = "demo-prod"	
+
+// harbor-registry credentials
+def registryCredential = 'jenkin_harbor'
+// gitlab credentials
+def gitlabCredential = 'jenkin_gitlab'
+
+dockerBuildCommand = './'
+def version = "prod-0.${BUILD_NUMBER}"
+/*def version = "prod-0.16"*/
+//helm param for upgrade
+def helmRelease="my-app"
+def helmValues = "/var/lib/jenkins/workspace/DEMO_PROD/prod_service_A/helmchart/app-demo-value.yaml"
+def helmChart = "/var/lib/jenkins/workspace/DEMO_PROD/prod_service_A/helmchart/app-demo"
+
+	
+pipeline {
+	agent any
+    environment {
+			DOCKER_REGISTRY = 'https://harbor.prod.com'
+			DOCKER_IMAGE_NAME = "${imageGroup}/${appName}"
+			DOCKER_IMAGE = "harbor.prod.com/${DOCKER_IMAGE_NAME}"
+	}	
+	stages {		
+		stage('Checkout project') 
+		{
+		  steps 
+		  {
+			echo "checkout project"
+			git branch: gitBranch,
+			   credentialsId: gitlabCredential,
+			   url: gitRepository
+			sh "git reset --hard"				
+		  }
+		}
+		stage('Build project') 
+	    {
+			  steps 
+			  {
+				sh "npm install"
+			  }
+			}
+		stage('Build docker and push to registry') 
+		{
+		  steps 
+		  {
+			script {
+					app = docker.build(DOCKER_IMAGE_NAME, dockerBuildCommand)
+					docker.withRegistry(DOCKER_REGISTRY, registryCredential ) {                       
+					   app.push(version)
+					}
+
+					sh "docker rmi ${DOCKER_IMAGE_NAME} -f"
+					sh "docker rmi ${DOCKER_IMAGE}:${version} -f"				
+				}
+		  }
+		}	
+		stage('Apply k8s') {
+    		steps {
+    				script {
+    					echo "Deploy to k8s"
+    					sh "helm --namespace=$namespace upgrade $helmRelease -f $helmValues $helmChart  --set image.repository=${DOCKER_IMAGE},image.tag=${version}"
+    				}
+    			}
+    		}
+	}
+	
+}

@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:    
+  name: apple.prod.com  
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: apple.prod.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: apple-service
+            port:
+              number: 5678
+        path: /
+        pathType: Prefix
+
